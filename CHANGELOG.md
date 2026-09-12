@@ -11,6 +11,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Vercel deployment configuration.
 - Expanded content management controls for projects and site settings.
 
+### Changed
+
+- Moved local demo credentials and the fallback session secret out of source code into environment configuration.
+
 ## [0.1.0] - 2026-09-12
 
 ### Added

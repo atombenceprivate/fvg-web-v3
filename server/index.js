@@ -2,12 +2,13 @@ import 'dotenv/config'
 import express from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import { randomBytes } from 'node:crypto'
 import { db, initialiseDatabase } from './db.js'
 
 const app = express()
-const secret = process.env.AUTH_SECRET || 'local-development-secret-change-before-production'
-const demoMode = !process.env.TURSO_DATABASE_URL
-const demoAdmin = { email: 'demo@firstvideos.group', password: 'FirstVideosDemo!2026' }
+const secret = process.env.AUTH_SECRET || randomBytes(32).toString('hex')
+const demoMode = !process.env.TURSO_DATABASE_URL && process.env.NODE_ENV !== 'production'
+const demoAdmin = { email: process.env.DEMO_ADMIN_EMAIL, password: process.env.DEMO_ADMIN_PASSWORD }
 app.use(express.json())
 const adminOnly = (req, res, next) => {
   try { req.admin = jwt.verify((req.headers.authorization || '').replace('Bearer ', ''), secret); next() }
@@ -15,7 +16,11 @@ const adminOnly = (req, res, next) => {
 }
 const hasAdmin = async () => Boolean((await db.execute('SELECT id FROM admins LIMIT 1')).rows.length)
 
-app.get('/api/auth/status', async (_req,res) => res.json({ setupRequired: !(await hasAdmin()), demoMode }))
+app.get('/api/auth/status', async (_req,res) => res.json({ setupRequired: !(await hasAdmin()), demoMode: demoMode && Boolean(demoAdmin.email && demoAdmin.password) }))
+app.get('/api/auth/demo-credentials', (_req,res) => {
+  if (!demoMode || !demoAdmin.email || !demoAdmin.password) return res.status(404).end()
+  res.json(demoAdmin)
+})
 app.post('/api/auth/setup', async (req,res) => {
   if (await hasAdmin()) return res.status(409).json({ error: 'Setup has already been completed.' })
   const { email, password } = req.body
@@ -36,7 +41,7 @@ app.put('/api/projects/:id', adminOnly, async (req,res) => { const { title_hu, t
 async function start() {
   await initialiseDatabase()
   // A predictable demo account is created only for the local database and never for Turso.
-  if (demoMode && !(await hasAdmin())) await db.execute({ sql:'INSERT INTO admins (email, password_hash, role) VALUES (?, ?, ?)', args:[demoAdmin.email, await bcrypt.hash(demoAdmin.password, 12), 'superadmin'] })
+  if (demoMode && demoAdmin.email && demoAdmin.password && !(await hasAdmin())) await db.execute({ sql:'INSERT INTO admins (email, password_hash, role) VALUES (?, ?, ?)', args:[demoAdmin.email, await bcrypt.hash(demoAdmin.password, 12), 'superadmin'] })
   app.listen(8787, '127.0.0.1', ()=>console.log('Admin API running on http://127.0.0.1:8787'))
 }
 start()

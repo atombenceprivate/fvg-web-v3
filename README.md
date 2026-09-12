@@ -30,14 +30,7 @@ The public website is available at `http://localhost:5173` and the administratio
 
 ## Local demo access
 
-When `TURSO_DATABASE_URL` is not set, the application creates a local database at `data/fvg.db` and provisions a demo superadmin account. The admin sign-in page includes a button to fill these credentials automatically.
-
-| Field | Value |
-| --- | --- |
-| Email | `demo@firstvideos.group` |
-| Password | `FirstVideosDemo!2026` |
-
-Do not use these credentials in a public or production deployment.
+When `TURSO_DATABASE_URL` is not set, the application can create a local database at `data/fvg.db` and provision a demo superadmin account. Set `DEMO_ADMIN_EMAIL` and `DEMO_ADMIN_PASSWORD` in an untracked local `.env` file; the admin sign-in page will then offer to fill those local credentials automatically. Demo access is disabled in production mode.
 
 ## Environment configuration
 
@@ -47,6 +40,8 @@ Copy `.env.example` to `.env` and set production values before deployment.
 TURSO_DATABASE_URL=libsql://your-database.turso.io
 TURSO_AUTH_TOKEN=your-turso-token
 AUTH_SECRET=a-long-random-secret
+DEMO_ADMIN_EMAIL=local-admin@example.test
+DEMO_ADMIN_PASSWORD=local-development-password
 ```
 
 Without `TURSO_DATABASE_URL`, libSQL uses the local database URL specified by `LOCAL_DATABASE_URL`, or `file:./data/fvg.db` by default.
@@ -73,6 +68,7 @@ public/       Public SVG logo assets
 - Configure Turso credentials in the deployment platform's protected environment variables.
 - Replace the demo login flow with managed accounts before making the admin interface publicly available.
 
+=======
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE).
