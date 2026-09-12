@@ -41,7 +41,11 @@ app.put('/api/projects/:id', adminOnly, async (req,res) => { const { title_hu, t
 async function start() {
   await initialiseDatabase()
   // A predictable demo account is created only for the local database and never for Turso.
-  if (demoMode && demoAdmin.email && demoAdmin.password && !(await hasAdmin())) await db.execute({ sql:'INSERT INTO admins (email, password_hash, role) VALUES (?, ?, ?)', args:[demoAdmin.email, await bcrypt.hash(demoAdmin.password, 12), 'superadmin'] })
+  if (demoMode && demoAdmin.email && demoAdmin.password) {
+    const passwordHash = await bcrypt.hash(demoAdmin.password, 12)
+    if (!(await hasAdmin())) await db.execute({ sql:'INSERT INTO admins (email, password_hash, role) VALUES (?, ?, ?)', args:[demoAdmin.email, passwordHash, 'superadmin'] })
+    else await db.execute({ sql:'UPDATE admins SET password_hash = ? WHERE email = ? AND role = ?', args:[passwordHash, demoAdmin.email, 'superadmin'] })
+  }
   app.listen(8787, '127.0.0.1', ()=>console.log('Admin API running on http://127.0.0.1:8787'))
 }
 start()

@@ -14,6 +14,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - Moved local demo credentials and the fallback session secret out of source code into environment configuration.
+- Synchronize the local demo account password with its local environment configuration on startup.
+- Updated the primary FirstVideos Group brand colour to `#EB0044`.
+- Applied shared language and light/dark preferences to the admin sign-in and dashboard views.
+- Aligned all admin surfaces with the shared FirstVideos Group colour tokens.
+- Removed remaining legacy lime accents from the admin dashboard.
+- Replaced the site-wide type system with Bodoni Moda.
+- Updated the site-wide type system to Kanit.
 
 ## [0.1.0] - 2026-09-12
 
