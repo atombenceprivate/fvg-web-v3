@@ -1,18 +1,17 @@
-import { createClient } from '@libsql/client'
-import { mkdirSync } from 'node:fs'
-
-// Uses Turso in deployed environments; a local libSQL-compatible file during development.
-if (!process.env.TURSO_DATABASE_URL) mkdirSync('./data', { recursive: true })
-export const db = createClient({
-  url: process.env.TURSO_DATABASE_URL || process.env.LOCAL_DATABASE_URL || 'file:./data/fvg.db',
-  authToken: process.env.TURSO_AUTH_TOKEN
-})
-
-export async function initialiseDatabase() {
-  await db.batch([
-    'CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
-    'CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY, title_hu TEXT, title_en TEXT, category TEXT, image_url TEXT, sort_order INTEGER)',
-    'CREATE TABLE IF NOT EXISTS admins (id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT \'admin\', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)',
-    'CREATE INDEX IF NOT EXISTS idx_admins_email ON admins(email)'
-  ])
+import {createClient} from '@libsql/client'
+import {mkdirSync} from 'node:fs'
+if(!process.env.TURSO_DATABASE_URL)mkdirSync('./data',{recursive:true})
+export const db=createClient({url:process.env.TURSO_DATABASE_URL||process.env.LOCAL_DATABASE_URL||'file:./data/fvg.db',authToken:process.env.TURSO_AUTH_TOKEN})
+const settings={hero_title_hu:'Történetek, amelyek\nmozgásba hozzák a világot.',hero_title_en:'Stories that\nmove the world.',hero_kicker_hu:'FILM • TARTALOM • TÖRTÉNETEK',hero_kicker_en:'FILM • CONTENT • STORIES',intro_hu:'A FirstVideos Group egy független produkciós stúdió. Filmekkel, élményekkel és valódi emberi pillanatokkal tesszük emlékezetessé a márkákat.',intro_en:'FirstVideos Group is an independent production studio. We make brands memorable through films, experiences and genuine human moments.',email:'hello@firstvideos.group',showreel_url:'https://vimeo.com/',instagram_url:'https://instagram.com/',vimeo_url:'https://vimeo.com/',linkedin_url:'https://linkedin.com/'}
+export async function initialiseDatabase(){
+ await db.batch(['CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY,value TEXT NOT NULL)',"CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY AUTOINCREMENT,title_hu TEXT NOT NULL,title_en TEXT NOT NULL,category_hu TEXT NOT NULL DEFAULT '',category_en TEXT NOT NULL DEFAULT '',image_url TEXT NOT NULL DEFAULT '',sort_order INTEGER NOT NULL DEFAULT 0)","CREATE TABLE IF NOT EXISTS services (id INTEGER PRIMARY KEY AUTOINCREMENT,name_hu TEXT NOT NULL,name_en TEXT NOT NULL,icon TEXT NOT NULL DEFAULT 'fa-film',sort_order INTEGER NOT NULL DEFAULT 0)","CREATE TABLE IF NOT EXISTS admins (id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'admin',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",'CREATE INDEX IF NOT EXISTS idx_admins_email ON admins(email)'])
+ const projectColumns=new Set((await db.execute('PRAGMA table_info(projects)')).rows.map(x=>x.name))
+ for(const [name,definition] of [['category_hu',"TEXT NOT NULL DEFAULT ''"],['category_en',"TEXT NOT NULL DEFAULT ''"]])if(!projectColumns.has(name))await db.execute(`ALTER TABLE projects ADD COLUMN ${name} ${definition}`)
+ for(const [key,value] of Object.entries(settings))await db.execute({sql:'INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)',args:[key,value]})
+ if(!Number((await db.execute('SELECT COUNT(*) total FROM projects')).rows[0].total))await db.batch([
+  {sql:'INSERT INTO projects(title_hu,title_en,category_hu,category_en,image_url,sort_order) VALUES(?,?,?,?,?,?)',args:['A horizonton túl','Beyond the horizon','Márkafilm','Brand film','https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1400&q=85',1]},
+  {sql:'INSERT INTO projects(title_hu,title_en,category_hu,category_en,image_url,sort_order) VALUES(?,?,?,?,?,?)',args:['Mozgásban','In motion','Kampány','Campaign','https://images.unsplash.com/photo-1531058020387-3be344556be6?auto=format&fit=crop&w=1000&q=85',2]},
+  {sql:'INSERT INTO projects(title_hu,title_en,category_hu,category_en,image_url,sort_order) VALUES(?,?,?,?,?,?)',args:['A jelen művészete','The art of now','Dokumentumfilm','Documentary','https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=1000&q=85',3]}])
+ if(!Number((await db.execute('SELECT COUNT(*) total FROM services')).rows[0].total))await db.batch([
+  {sql:'INSERT INTO services(name_hu,name_en,icon,sort_order) VALUES(?,?,?,?)',args:['Kreatív koncepció','Creative direction','fa-lightbulb',1]},{sql:'INSERT INTO services(name_hu,name_en,icon,sort_order) VALUES(?,?,?,?)',args:['Reklámfilm-gyártás','Commercial production','fa-clapperboard',2]},{sql:'INSERT INTO services(name_hu,name_en,icon,sort_order) VALUES(?,?,?,?)',args:['Dokumentumfilmek','Documentary','fa-film',3]},{sql:'INSERT INTO services(name_hu,name_en,icon,sort_order) VALUES(?,?,?,?)',args:['Utómunka','Post-production','fa-wand-magic-sparkles',4]}])
 }

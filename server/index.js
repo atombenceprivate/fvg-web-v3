@@ -1,51 +1,12 @@
 import 'dotenv/config'
-import express from 'express'
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
-import { randomBytes } from 'node:crypto'
-import { db, initialiseDatabase } from './db.js'
-
-const app = express()
-const secret = process.env.AUTH_SECRET || randomBytes(32).toString('hex')
-const demoMode = !process.env.TURSO_DATABASE_URL && process.env.NODE_ENV !== 'production'
-const demoAdmin = { email: process.env.DEMO_ADMIN_EMAIL, password: process.env.DEMO_ADMIN_PASSWORD }
-app.use(express.json())
-const adminOnly = (req, res, next) => {
-  try { req.admin = jwt.verify((req.headers.authorization || '').replace('Bearer ', ''), secret); next() }
-  catch { res.status(401).json({ error: 'Unauthorized' }) }
-}
-const hasAdmin = async () => Boolean((await db.execute('SELECT id FROM admins LIMIT 1')).rows.length)
-
-app.get('/api/auth/status', async (_req,res) => res.json({ setupRequired: !(await hasAdmin()), demoMode: demoMode && Boolean(demoAdmin.email && demoAdmin.password) }))
-app.get('/api/auth/demo-credentials', (_req,res) => {
-  if (!demoMode || !demoAdmin.email || !demoAdmin.password) return res.status(404).end()
-  res.json(demoAdmin)
-})
-app.post('/api/auth/setup', async (req,res) => {
-  if (await hasAdmin()) return res.status(409).json({ error: 'Setup has already been completed.' })
-  const { email, password } = req.body
-  if (!email || !/^\S+@\S+\.\S+$/.test(email) || !password || password.length < 12) return res.status(400).json({ error: 'Use a valid email address and a password with at least 12 characters.' })
-  await db.execute({ sql:'INSERT INTO admins (email, password_hash, role) VALUES (?, ?, ?)', args:[email.toLowerCase(), await bcrypt.hash(password, 12), 'superadmin'] })
-  res.status(201).json({ ok:true })
-})
-app.post('/api/auth/login', async (req,res) => {
-  const { email, password } = req.body
-  const result = await db.execute({ sql:'SELECT id, email, password_hash, role FROM admins WHERE email = ?', args:[String(email || '').toLowerCase()] })
-  const admin = result.rows[0]
-  if (!admin || !(await bcrypt.compare(password || '', admin.password_hash))) return res.status(401).json({ error: 'Incorrect email address or password.' })
-  res.json({ token: jwt.sign({ id:admin.id, email:admin.email, role:admin.role }, secret, { expiresIn:'8h' }), admin:{ email:admin.email, role:admin.role } })
-})
-app.get('/api/projects', adminOnly, async (_req,res) => res.json((await db.execute('SELECT * FROM projects ORDER BY sort_order, id')).rows))
-app.put('/api/projects/:id', adminOnly, async (req,res) => { const { title_hu, title_en, category }=req.body; await db.execute({sql:'UPDATE projects SET title_hu=?, title_en=?, category=? WHERE id=?', args:[title_hu,title_en,category,req.params.id]}); res.json({ok:true}) })
-
-async function start() {
-  await initialiseDatabase()
-  // A predictable demo account is created only for the local database and never for Turso.
-  if (demoMode && demoAdmin.email && demoAdmin.password) {
-    const passwordHash = await bcrypt.hash(demoAdmin.password, 12)
-    if (!(await hasAdmin())) await db.execute({ sql:'INSERT INTO admins (email, password_hash, role) VALUES (?, ?, ?)', args:[demoAdmin.email, passwordHash, 'superadmin'] })
-    else await db.execute({ sql:'UPDATE admins SET password_hash = ? WHERE email = ? AND role = ?', args:[passwordHash, demoAdmin.email, 'superadmin'] })
-  }
-  app.listen(8787, '127.0.0.1', ()=>console.log('Admin API running on http://127.0.0.1:8787'))
-}
-start()
+import express from 'express';import bcrypt from 'bcryptjs';import jwt from 'jsonwebtoken';import {randomBytes} from 'node:crypto';import {db,initialiseDatabase} from './db.js'
+const app=express(),port=Number(process.env.PORT||8787),secret=process.env.AUTH_SECRET||randomBytes(32).toString('hex'),demoMode=!process.env.TURSO_DATABASE_URL,demoAdmin={email:process.env.DEMO_ADMIN_EMAIL||'demo@firstvideos.group',password:process.env.DEMO_ADMIN_PASSWORD||'FirstVideosDemo123!'};app.use(express.json({limit:'1mb'}))
+const adminOnly=(req,res,next)=>{try{req.admin=jwt.verify((req.headers.authorization||'').replace('Bearer ',''),secret);next()}catch{res.status(401).json({error:'Unauthorized'})}},hasAdmin=async()=>Boolean((await db.execute('SELECT id FROM admins LIMIT 1')).rows.length)
+app.get('/api/content',async(_q,res)=>{const rows=(await db.execute('SELECT key,value FROM settings')).rows;res.json({settings:Object.fromEntries(rows.map(x=>[x.key,x.value])),projects:(await db.execute('SELECT * FROM projects ORDER BY sort_order,id')).rows,services:(await db.execute('SELECT * FROM services ORDER BY sort_order,id')).rows})})
+app.get('/api/auth/status',async(_q,res)=>res.json({setupRequired:!(await hasAdmin()),demoMode}))
+app.get('/api/auth/demo-credentials',(_q,res)=>demoMode?res.json(demoAdmin):res.status(404).json({error:'Not available'}))
+app.post('/api/auth/setup',async(req,res)=>{if(await hasAdmin())return res.status(409).json({error:'Setup has already been completed.'});const{email,password}=req.body;if(!/^\S+@\S+\.\S+$/.test(email||'')||(password||'').length<12)return res.status(400).json({error:'Use a valid email and at least 12 characters.'});await db.execute({sql:'INSERT INTO admins(email,password_hash,role) VALUES(?,?,?)',args:[email.toLowerCase(),await bcrypt.hash(password,12),'superadmin']});const admin={email:email.toLowerCase(),role:'superadmin'};res.status(201).json({token:jwt.sign(admin,secret,{expiresIn:'8h'}),admin})})
+app.post('/api/auth/login',async(req,res)=>{const row=(await db.execute({sql:'SELECT * FROM admins WHERE email=?',args:[String(req.body.email||'').toLowerCase()]})).rows[0];if(!row||!await bcrypt.compare(req.body.password||'',row.password_hash))return res.status(401).json({error:'Incorrect email or password.'});const admin={id:row.id,email:row.email,role:row.role};res.json({token:jwt.sign(admin,secret,{expiresIn:'8h'}),admin})});app.get('/api/auth/me',adminOnly,(req,res)=>res.json({admin:req.admin}))
+app.put('/api/settings',adminOnly,async(req,res)=>{for(const[key,value]of Object.entries(req.body))await db.execute({sql:'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',args:[key,String(value)]});res.json({ok:true})})
+for(const type of ['projects','services']){const fields=type==='projects'?['title_hu','title_en','category_hu','category_en','image_url','sort_order']:['name_hu','name_en','icon','sort_order'];app.post(`/api/${type}`,adminOnly,async(req,res)=>{const result=await db.execute({sql:`INSERT INTO ${type}(${fields.join(',')}) VALUES(${fields.map(()=>'?').join(',')})`,args:fields.map(k=>req.body[k])});res.status(201).json({...req.body,id:Number(result.lastInsertRowid)})});app.put(`/api/${type}/:id`,adminOnly,async(req,res)=>{await db.execute({sql:`UPDATE ${type} SET ${fields.map(k=>`${k}=?`).join(',')} WHERE id=?`,args:[...fields.map(k=>req.body[k]),req.params.id]});res.json({...req.body,id:Number(req.params.id)})});app.delete(`/api/${type}/:id`,adminOnly,async(req,res)=>{await db.execute({sql:`DELETE FROM ${type} WHERE id=?`,args:[req.params.id]});res.json({ok:true})})}
+await initialiseDatabase();if(demoMode){const hash=await bcrypt.hash(demoAdmin.password,12),existing=(await db.execute({sql:'SELECT id FROM admins WHERE email=?',args:[demoAdmin.email]})).rows[0];if(existing)await db.execute({sql:'UPDATE admins SET password_hash=?,role=? WHERE id=?',args:[hash,'superadmin',existing.id]});else if(!await hasAdmin())await db.execute({sql:'INSERT INTO admins(email,password_hash,role) VALUES(?,?,?)',args:[demoAdmin.email,hash,'superadmin']})}app.listen(port,'127.0.0.1',()=>console.log(`FVG API: http://127.0.0.1:${port}`))
